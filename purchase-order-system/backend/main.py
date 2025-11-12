@@ -1,13 +1,13 @@
 import os
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Float, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
 from datetime import date
-from typing import List
+from typing import List, Optional
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/purchase_orders")
@@ -46,6 +46,11 @@ class PurchaseOrderResponse(PurchaseOrderBase):
     class Config:
         from_attributes = True
 
+class PaginatedPurchaseOrderResponse(BaseModel):
+    data: List[PurchaseOrderResponse]
+    next_cursor: Optional[int] = None
+    has_more: bool = False
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -74,10 +79,30 @@ def get_db():
 def read_root():
     return {"message": "Purchase Order API"}
 
-@app.get("/api/purchase-orders", response_model=List[PurchaseOrderResponse])
-def get_purchase_orders(db: Session = Depends(get_db)):
-    orders = db.query(PurchaseOrder).all()
-    return orders
+@app.get("/api/purchase-orders", response_model=PaginatedPurchaseOrderResponse)
+def get_purchase_orders(
+    cursor: Optional[int] = Query(None, description="Cursor for pagination (last seen ID)"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(PurchaseOrder).order_by(PurchaseOrder.id)
+    
+    if cursor is not None:
+        query = query.filter(PurchaseOrder.id > cursor)
+    
+    orders = query.limit(limit + 1).all()
+    
+    has_more = len(orders) > limit
+    if has_more:
+        orders = orders[:limit]
+    
+    next_cursor = orders[-1].id if orders and has_more else None
+    
+    return PaginatedPurchaseOrderResponse(
+        data=orders,
+        next_cursor=next_cursor,
+        has_more=has_more
+    )
 
 @app.get("/api/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
 def get_purchase_order(order_id: int, db: Session = Depends(get_db)):
