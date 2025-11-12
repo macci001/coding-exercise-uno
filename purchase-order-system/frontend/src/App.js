@@ -4,12 +4,12 @@ import axios from 'axios';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Constants for virtualization and performance
-const ITEM_HEIGHT = 80; // Height of each row in pixels
+const ITEM_HEIGHT = 180; // Increased height for card design
 const LIST_HEIGHT = 600; // Height of the virtualized list container
 const PAGE_SIZE = 20; // Number of items to fetch per page
 const PREFETCH_THRESHOLD = 0.8; // Start prefetching when 80% scrolled
 const CACHE_SIZE = 1000; // Maximum number of items to keep in cache
-const BUFFER_SIZE = 0; // Number of extra items to render above/below visible area
+const BUFFER_SIZE = 2; // Number of extra items to render above/below visible area
 
 function App() {
   // State management
@@ -156,7 +156,7 @@ function App() {
 
     // Infinite scroll trigger
     const distanceFromBottom = scrollHeight - (newScrollTop + clientHeight);
-    if (distanceFromBottom < 200 && hasNextPage && !isLoadingMore) {
+    if (distanceFromBottom < 300 && hasNextPage && !isLoadingMore) {
       fetchOrders(nextCursor, false);
     }
   }, [hasNextPage, isLoadingMore, nextCursor, cache, fetchOrders]);
@@ -228,12 +228,134 @@ function App() {
     }).format(amount);
   };
 
+  // Loading Spinner Component
+  const LoadingSpinner = ({ size = 'default' }) => {
+    const sizeClasses = {
+      small: 'h-4 w-4',
+      default: 'h-6 w-6',
+      large: 'h-8 w-8'
+    };
+
+    return (
+      <div className={`inline-block ${sizeClasses[size]} animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent`}></div>
+    );
+  };
+
+  // Card Component for Purchase Orders
+  const PurchaseOrderCard = ({ item, index }) => {
+    if (!item) {
+      // Loading skeleton card
+      return (
+        <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 mx-4 mb-4">
+          <div className="animate-pulse">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <div className="h-6 bg-gray-300 rounded w-48 mb-2"></div>
+                <div className="h-4 bg-gray-300 rounded w-24"></div>
+              </div>
+              <div className="h-8 bg-gray-300 rounded w-16"></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <div className="h-4 bg-gray-300 rounded w-20 mb-1"></div>
+                <div className="h-5 bg-gray-300 rounded w-24"></div>
+              </div>
+              <div>
+                <div className="h-4 bg-gray-300 rounded w-20 mb-1"></div>
+                <div className="h-5 bg-gray-300 rounded w-24"></div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="h-4 bg-gray-300 rounded w-16 mb-1"></div>
+                <div className="h-6 bg-gray-300 rounded w-20"></div>
+              </div>
+              <div className="h-8 bg-gray-300 rounded w-16"></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const totalPrice = item.total_price;
+    const isPriceHigh = totalPrice > 1000;
+
+    return (
+      <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-200 p-6 mx-4 mb-4">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 truncate">
+              {item.item_name}
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">Order #{item.id}</p>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+            isPriceHigh 
+              ? 'bg-purple-100 text-purple-800' 
+              : 'bg-green-100 text-green-800'
+          }`}>
+            {isPriceHigh ? 'High Value' : 'Standard'}
+          </span>
+        </div>
+
+        {/* Dates Section */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="border rounded-md p-1">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Order Date</p>
+            <p className="text-sm font-medium text-gray-900">{formatDate(item.order_date)}</p>
+          </div>
+          <div className="border rounded-md p-1">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Delivery Date</p>
+            <p className="text-sm font-medium text-gray-900">{formatDate(item.delivery_date)}</p>
+          </div>
+        </div>
+
+        {/* Quantity and Price Section */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex space-x-6">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Quantity</p>
+              <p className="text-lg font-semibold text-gray-900">{item.quantity}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Unit Price</p>
+              <p className="text-lg font-semibold text-gray-900">{formatCurrency(item.unit_price)}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Total</p>
+            <p className={`text-xl font-bold ${isPriceHigh ? 'text-purple-600' : 'text-green-600'}`}>
+              {formatCurrency(totalPrice)}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end pt-4 border-t border-gray-100">
+          <button
+            onClick={() => handleDelete(item.id)}
+            className="px-4 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200"
+          >
+            Delete Order
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-semibold text-gray-900">Purchase Orders</h1>
-          <p className="mt-2 text-sm text-gray-600">Manage and track your purchase orders</p>
+          <p className="mt-2 text-sm text-gray-600">
+            Virtualized card layout with infinite scroll and intelligent caching
+          </p>
+          <div className="mt-2 text-xs text-gray-500">
+            Total: {items.length} items | Rendered: {visibleItems.length} items | 
+            Range: {visibleRange.start}-{visibleRange.end}
+          </div>
         </div>
 
         {error && (
@@ -297,31 +419,33 @@ function App() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Order Date
-                </label>
-                <input
-                  type="date"
-                  name="order_date"
-                  value={formData.order_date}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Date
-                </label>
-                <input
-                  type="date"
-                  name="delivery_date"
-                  value={formData.delivery_date}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="w-full flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Order Date
+                  </label>
+                  <input
+                    type="date"
+                    name="order_date"
+                    value={formData.order_date}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Date
+                  </label>
+                  <input
+                    type="date"
+                    name="delivery_date"
+                    value={formData.delivery_date}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div className="md:col-span-2">
                 <button
@@ -337,26 +461,16 @@ function App() {
 
         {loading ? (
           <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-            <p className="mt-2 text-gray-600">Loading purchase orders...</p>
+            <LoadingSpinner size="large" />
+            <p className="mt-4 text-gray-600">Loading purchase orders...</p>
           </div>
         ) : items.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <p className="text-gray-500">No purchase orders found. Create one to get started.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow">
-            {/* Header */}
-            <div className="grid grid-cols-6 gap-4 px-6 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-              <div>Item Name</div>
-              <div>Order Date</div>
-              <div>Delivery Date</div>
-              <div>Quantity</div>
-              <div>Unit Price</div>
-              <div>Total Price</div>
-            </div>
-
-            {/* Virtualized Scrollable Area */}
+          <div>
+            {/* Virtualized Card List */}
             <div
               ref={containerRef}
               className="relative overflow-auto"
@@ -365,68 +479,38 @@ function App() {
             >
               {/* Virtual spacer for total height */}
               <div style={{ height: visibleRange.totalHeight }}>
-                {/* Rendered items */}
+                {/* Rendered cards */}
                 <div
                   style={{
                     transform: `translateY(${visibleRange.offsetY}px)`,
                     position: 'relative'
                   }}
+                  className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 w-full'
                 >
                   {visibleItems.map((item, index) => {
                     const actualIndex = visibleRange.start + index;
                     return (
                       <div
                         key={item ? `${item.id}-${actualIndex}` : `loading-${actualIndex}`}
-                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                        style={{ height: ITEM_HEIGHT }}
+                        className="flex flex-col justify-center h-auto col-span-1 max-w-lg mx-auto"
                       >
-                        {item ? (
-                          <div className="px-6 py-4 h-full flex items-center">
-                            <div className="grid grid-cols-6 gap-4 items-center w-full">
-                              <div className="font-medium text-gray-900 truncate">
-                                {item.item_name}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {formatDate(item.order_date)}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {formatDate(item.delivery_date)}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {item.quantity}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {formatCurrency(item.unit_price)}
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {formatCurrency(item.total_price)}
-                                </div>
-                                <button
-                                  onClick={() => handleDelete(item.id)}
-                                  className="text-red-600 hover:text-red-800 transition-colors duration-200 text-sm"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          // Loading skeleton
-                          <div className="px-6 py-4 h-full flex items-center">
-                            <div className="animate-pulse grid grid-cols-6 gap-4 w-full">
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                              <div className="h-4 bg-gray-300 rounded"></div>
-                            </div>
-                          </div>
-                        )}
+                        <PurchaseOrderCard item={item} index={actualIndex} />
                       </div>
                     );
                   })}
+
+                  {/* Loading indicator for infinite scroll */}
+                  {isLoadingMore && (
+                    <div
+                      style={{ height: ITEM_HEIGHT }}
+                      className="flex items-center justify-center"
+                    >
+                      <div className="flex items-center space-x-3 text-blue-600">
+                        <LoadingSpinner size="default" />
+                        <span className="text-sm font-medium">Loading more orders...</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
