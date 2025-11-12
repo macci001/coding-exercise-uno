@@ -24,6 +24,8 @@ function App() {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [toast, setToast] = useState(null);
   const [deletingItems, setDeletingItems] = useState(new Set());
+  const [showDetailPanel, setShowDetailPanel] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({
     item_name: '',
     order_date: '',
@@ -149,6 +151,22 @@ function App() {
     fetchOrders();
   }, [fetchOrders]);
 
+  // ESC key handler for closing detail panel
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape' && showDetailPanel) {
+        handleCloseDetailPanel();
+      }
+    };
+
+    if (showDetailPanel) {
+      document.addEventListener('keydown', handleEscKey);
+      return () => {
+        document.removeEventListener('keydown', handleEscKey);
+      };
+    }
+  }, [showDetailPanel]);
+
   // Form handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -186,6 +204,20 @@ function App() {
   const handleDeleteClick = (item) => {
     setItemToDelete(item);
     setShowDeleteModal(true);
+  };
+
+  const handleCardClick = (item) => {
+    setSelectedItem(item);
+    setShowDetailPanel(true);
+    // Lock body scroll
+    document.body.style.overflow = 'hidden';
+  };
+
+  const handleCloseDetailPanel = () => {
+    setShowDetailPanel(false);
+    setSelectedItem(null);
+    // Unlock body scroll
+    document.body.style.overflow = 'unset';
   };
 
   const handleDeleteConfirm = async () => {
@@ -434,9 +466,15 @@ function App() {
     const isDeleting = deletingItems.has(item.id);
 
     const cardContent = (
-      <div className={`rounded-lg shadow-md hover:shadow-lg transition-all duration-300 ease-in-out border border-gray-200 p-6 mx-4 mb-4 overflow-hidden ${
-        isDeleting ? 'opacity-0 scale-95 max-h-0 p-0 m-0 border-0' : 'opacity-100 scale-100 max-h-96'
-      }`}>
+      <div 
+        className={`rounded-lg shadow-md hover:shadow-lg transition-all duration-300 ease-in-out border border-gray-200 p-6 mx-4 mb-4 overflow-hidden cursor-pointer ${
+          isDeleting ? 'opacity-0 scale-95 max-h-0 p-0 m-0 border-0' : 'opacity-100 scale-100 max-h-96'
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCardClick(item);
+        }}
+      >
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1">
@@ -556,6 +594,134 @@ function App() {
                 >
                   Delete Order
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Detail Slide-out Panel
+  const DetailPanel = () => {
+    if (!selectedItem) return null;
+
+    return (
+      <div className={`fixed inset-0 z-50 overflow-hidden transition-all duration-300 ${
+        showDetailPanel ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+      }`}>
+        {/* Backdrop */}
+        <div 
+          className="fixed inset-0 bg-black backdrop-blur-sm"
+          style={{
+            opacity: showDetailPanel ? 0.5 : 0,
+            transition: 'opacity 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+          }}
+          onClick={handleCloseDetailPanel}
+        />
+        
+        {/* Slide-out Panel */}
+        <div 
+          className="fixed inset-y-0 right-0 w-full sm:w-96 md:w-[500px] bg-white shadow-2xl transform"
+          style={{
+            transform: showDetailPanel ? 'translateX(0)' : 'translateX(100%)',
+            transition: 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">Order Details</h2>
+            <button
+              onClick={handleCloseDetailPanel}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
+            >
+              <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            {/* Basic Information */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Order Information</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                  <p className="text-lg font-semibold text-gray-900">{selectedItem.item_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Order ID</label>
+                  <p className="text-gray-900">#{selectedItem.id}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Timeline</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Order Date</label>
+                  <p className="text-gray-900">{formatDate(selectedItem.order_date)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
+                  <p className="text-gray-900">{formatDate(selectedItem.delivery_date)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Pricing Details</h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Quantity</span>
+                  <span className="font-semibold text-gray-900">{selectedItem.quantity}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Unit Price</span>
+                  <span className="font-semibold text-gray-900">{formatCurrency(selectedItem.unit_price)}</span>
+                </div>
+                <div className="border-t border-gray-200 pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-medium text-gray-900">Total</span>
+                    <span className="text-xl font-bold text-blue-600">{formatCurrency(selectedItem.total_price)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Order Summary */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Order Summary</h3>
+              <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-lg font-semibold text-blue-900">{selectedItem.item_name}</h4>
+                  <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                    Active Order
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700">Ordered:</span>
+                    <p className="font-medium text-blue-900">{formatDate(selectedItem.order_date)}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Expected:</span>
+                    <p className="font-medium text-blue-900">{formatDate(selectedItem.delivery_date)}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Quantity:</span>
+                    <p className="font-medium text-blue-900">{selectedItem.quantity} units</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Total Value:</span>
+                    <p className="font-bold text-blue-900">{formatCurrency(selectedItem.total_price)}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -742,6 +908,9 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Detail Panel */}
+      <DetailPanel />
 
       {/* Delete Modal */}
       <DeleteModal />
