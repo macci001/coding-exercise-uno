@@ -93,7 +93,7 @@ function App() {
       if (cursor) params.append('cursor', cursor);
       params.append('limit', PAGE_SIZE.toString());
 
-      const response = await axios.get(`${API_URL}/api/purchase-orders?${params}`);
+      const response = await axios.get(`${API_URL}/api/v2/purchase-orders?${params}`);
       const { data, next_cursor, has_more } = response.data;
 
       // Cache the response
@@ -179,7 +179,7 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/api/purchase-orders`, {
+      await axios.post(`${API_URL}/api/v2/purchase-orders`, {
         ...formData,
         quantity: parseInt(formData.quantity),
         unit_price: parseFloat(formData.unit_price)
@@ -232,7 +232,7 @@ function App() {
       setItems(prev => prev.filter(item => item.id !== itemToDelete.id));
       
       // Perform delete in background
-      await axios.delete(`${API_URL}/api/purchase-orders/${itemToDelete.id}`);
+      await axios.delete(`${API_URL}/api/v2/purchase-orders/${itemToDelete.id}`);
       
       // Clean up and show success
       setDeletingItems(prev => {
@@ -244,8 +244,8 @@ function App() {
       setItemToDelete(null);
       
     } catch (err) {
-      // On error, restore the item to the list
-      setError('Failed to delete purchase order');
+      // On error, restore the item to the list and show error toast
+      showToast('Failed to delete purchase order', 'error');
       setDeletingItems(prev => {
         const newSet = new Set(prev);
         newSet.delete(itemToDelete.id);

@@ -51,6 +51,14 @@ class PaginatedPurchaseOrderResponse(BaseModel):
     next_cursor: Optional[int] = None
     has_more: bool = False
 
+# V1 Response models (simple pagination)
+class SimplePaginatedPurchaseOrderResponse(BaseModel):
+    data: List[PurchaseOrderResponse]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -79,8 +87,70 @@ def get_db():
 def read_root():
     return {"message": "Purchase Order API"}
 
-@app.get("/api/purchase-orders", response_model=PaginatedPurchaseOrderResponse)
-def get_purchase_orders(
+# =============================================================================
+# V1 API Endpoints (Original - Simple pagination for backward compatibility)
+# =============================================================================
+
+@app.get("/api/v1/purchase-orders", response_model=SimplePaginatedPurchaseOrderResponse)
+def get_purchase_orders_v1(
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    # Calculate offset for simple pagination
+    offset = (page - 1) * per_page
+    
+    # Get total count
+    total = db.query(PurchaseOrder).count()
+    
+    # Get paginated data
+    orders = db.query(PurchaseOrder).order_by(PurchaseOrder.id).offset(offset).limit(per_page).all()
+    
+    # Calculate pagination metadata
+    total_pages = (total + per_page - 1) // per_page  # Ceiling division
+    
+    return SimplePaginatedPurchaseOrderResponse(
+        data=orders,
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages
+    )
+
+@app.get("/api/v1/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
+def get_purchase_order_v1(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    return order
+
+@app.post("/api/v1/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)
+def create_purchase_order_v1(order: PurchaseOrderCreate, db: Session = Depends(get_db)):
+    total_price = order.quantity * order.unit_price
+    db_order = PurchaseOrder(
+        **order.model_dump(),
+        total_price=total_price
+    )
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    return db_order
+
+@app.delete("/api/v1/purchase-orders/{order_id}", status_code=204)
+def delete_purchase_order_v1(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    db.delete(order)
+    db.commit()
+    return None
+
+# =============================================================================
+# V2 API Endpoints (Current - Cursor pagination)
+# =============================================================================
+
+@app.get("/api/v2/purchase-orders", response_model=PaginatedPurchaseOrderResponse)
+def get_purchase_orders_v2(
     cursor: Optional[int] = Query(None, description="Cursor for pagination (last seen ID)"),
     limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
     db: Session = Depends(get_db)
@@ -104,15 +174,15 @@ def get_purchase_orders(
         has_more=has_more
     )
 
-@app.get("/api/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
-def get_purchase_order(order_id: int, db: Session = Depends(get_db)):
+@app.get("/api/v2/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
+def get_purchase_order_v2(order_id: int, db: Session = Depends(get_db)):
     order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     return order
 
-@app.post("/api/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)
-def create_purchase_order(order: PurchaseOrderCreate, db: Session = Depends(get_db)):
+@app.post("/api/v2/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)
+def create_purchase_order_v2(order: PurchaseOrderCreate, db: Session = Depends(get_db)):
     total_price = order.quantity * order.unit_price
     db_order = PurchaseOrder(
         **order.model_dump(),
@@ -123,11 +193,39 @@ def create_purchase_order(order: PurchaseOrderCreate, db: Session = Depends(get_
     db.refresh(db_order)
     return db_order
 
-@app.delete("/api/purchase-orders/{order_id}", status_code=204)
-def delete_purchase_order(order_id: int, db: Session = Depends(get_db)):
+@app.delete("/api/v2/purchase-orders/{order_id}", status_code=204)
+def delete_purchase_order_v2(order_id: int, db: Session = Depends(get_db)):
     order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     db.delete(order)
     db.commit()
     return None
+
+# =============================================================================
+# Legacy endpoints (redirect to v1 for backward compatibility)
+# =============================================================================
+
+@app.get("/api/purchase-orders", response_model=SimplePaginatedPurchaseOrderResponse)
+def get_purchase_orders_legacy(
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    """Legacy endpoint - redirects to v1 for backward compatibility"""
+    return get_purchase_orders_v1(page=page, per_page=per_page, db=db)
+
+@app.get("/api/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
+def get_purchase_order_legacy(order_id: int, db: Session = Depends(get_db)):
+    """Legacy endpoint - redirects to v1 for backward compatibility"""
+    return get_purchase_order_v1(order_id=order_id, db=db)
+
+@app.post("/api/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)
+def create_purchase_order_legacy(order: PurchaseOrderCreate, db: Session = Depends(get_db)):
+    """Legacy endpoint - redirects to v1 for backward compatibility"""
+    return create_purchase_order_v1(order=order, db=db)
+
+@app.delete("/api/purchase-orders/{order_id}", status_code=204)
+def delete_purchase_order_legacy(order_id: int, db: Session = Depends(get_db)):
+    """Legacy endpoint - redirects to v1 for backward compatibility"""
+    return delete_purchase_order_v1(order_id=order_id, db=db)
